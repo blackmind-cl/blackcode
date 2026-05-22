@@ -21,10 +21,12 @@ ENV/
 htmlcov/
 
 # --- Salidas de Blackcode --------------------------------------------------
+# OJO: 'data/' va anclado a la raiz del repo. Sin la barra inicial tambien
+# excluiria 'src/blackcode/data/', que es codigo del paquete.
 blackcode-output/
 *-output/
 blackcode_metrics.json
-data/
+/data/
 corpus.jsonl
 *.corpus.jsonl
 
