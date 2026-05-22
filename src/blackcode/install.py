@@ -1,0 +1,53 @@
+"""Instala extras de Blackcode bajo demanda.
+
+Cuando una acción necesita una dependencia opcional (`blackcode[notion]`,
+`blackcode[llm]`, …) que no está instalada, este módulo la trata como una
+dependencia de la propia función: la instala con pip e informa al usuario.
+No pregunta — la acción que el usuario inició YA implica el consentimiento.
+
+Esta es la única ruta del proyecto que hace una llamada saliente a PyPI, y
+solo en respuesta a una acción que la necesita.
+"""
+
+from __future__ import annotations
+
+import importlib
+import importlib.util
+import subprocess
+import sys
+
+# Extras ya intentados en este proceso: si la instalación falló una vez no
+# volvemos a intentarla en la misma corrida.
+_attempted: set[str] = set()
+
+
+def ensure_extra(extra: str, *modules: str) -> None:
+    """Si alguno de los `modules` falta, instala `blackcode[extra]` con pip.
+
+    Imprime un aviso a stderr antes de instalar; pip emite su propio output.
+    Lanza `ImportError` si la instalación falla.
+    """
+    missing = [m for m in modules if importlib.util.find_spec(m) is None]
+    if not missing:
+        return
+    if extra in _attempted:
+        raise ImportError(
+            f"Falta blackcode[{extra}] y un intento previo en este proceso "
+            f"falló. Instálalo manualmente: pip install 'blackcode[{extra}]'"
+        )
+    _attempted.add(extra)
+    print(
+        f"⟫ Falta 'blackcode[{extra}]'. Instalando…",
+        file=sys.stderr,
+        flush=True,
+    )
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", f"blackcode[{extra}]"],
+            check=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise ImportError(
+            f"pip install 'blackcode[{extra}]' falló."
+        ) from exc
+    importlib.invalidate_caches()

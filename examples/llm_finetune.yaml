@@ -1,0 +1,31 @@
+# Ejemplo: fine-tuning de un LLM pequeño con datos de instrucciones.
+# Apto para 1 GPU de consumo (Blackcode usará QLoRA si la VRAM es justa).
+name: asistente-soporte
+
+data:
+  path: ./data/instrucciones.jsonl
+  format: jsonl
+  text_field: text
+  validation_split: 0.1
+  # Cada registro del JSONL tiene {instruction, output}; los renderizamos:
+  instruction_template: "### Instrucción:\n{instruction}\n\n### Respuesta:\n{output}"
+
+train:
+  trainer: llm
+  model: Qwen/Qwen2.5-0.5B-Instruct
+  output_dir: ./blackcode-output/soporte
+  strategy: auto          # full / lora / qlora / cpu autodetectado por VRAM
+  epochs: 3
+  learning_rate: 0.0002
+  max_seq_length: 1024
+  options:
+    lora_r: 16
+    lora_alpha: 32
+
+evaluate:
+  metrics: [loss, perplexity]
+
+serve:
+  host: 127.0.0.1
+  port: 8000
+  api: openai

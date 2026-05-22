@@ -1,0 +1,12 @@
+.git
+.github
+.venv
+**/__pycache__
+*.egg-info
+src/*.egg-info
+.pytest_cache
+.ruff_cache
+blackcode-output
+blackcode-export
+tests
+examples

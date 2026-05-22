@@ -1,0 +1,21 @@
+# Ejemplo: clasificador de texto clásico (TF-IDF + regresión logística).
+# No necesita GPU: ideal cuando un LLM es excesivo para el problema.
+name: clasificador-tickets
+
+data:
+  path: ./data/tickets.csv
+  format: csv
+  text_field: mensaje
+  label_field: categoria
+  validation_split: 0.2
+
+train:
+  trainer: sklearn
+  model: logreg            # logreg | ridge
+  output_dir: ./blackcode-output/clasificador
+  options:
+    max_features: 20000
+    max_iter: 1000
+
+evaluate:
+  metrics: [accuracy, f1]

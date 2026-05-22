@@ -1,0 +1,49 @@
+# --- Python ---------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.installed.cfg
+
+# --- Entornos virtuales ----------------------------------------------------
+.venv/
+venv/
+env/
+ENV/
+
+# --- Tests y herramientas --------------------------------------------------
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# --- Salidas de Blackcode --------------------------------------------------
+blackcode-output/
+*-output/
+blackcode_metrics.json
+data/
+corpus.jsonl
+*.corpus.jsonl
+
+# --- Artefactos de prueba en la raiz ---------------------------------------
+# config.yaml en la raiz es scaffolding del wizard; las configs de muestra
+# versionadas viven en examples/.
+/config.yaml
+/blackcode.yaml
+
+# --- Modelos y checkpoints (pesados) ---------------------------------------
+*.bin
+*.safetensors
+*.gguf
+*.onnx
+*.ckpt
+
+# --- Editores / herramientas locales ---------------------------------------
+.claude/
+.idea/
+.vscode/
+*.swp
+.DS_Store
