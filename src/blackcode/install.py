@@ -15,10 +15,13 @@ import importlib
 import importlib.util
 import subprocess
 import sys
+import threading
 
 # Extras ya intentados en este proceso: si la instalación falló una vez no
-# volvemos a intentarla en la misma corrida.
+# volvemos a intentarla en la misma corrida. El lock serializa las llamadas
+# concurrentes (p. ej. workers del server) para no lanzar dos pip a la vez.
 _attempted: set[str] = set()
+_lock = threading.Lock()
 
 
 def ensure_extra(extra: str, *modules: str) -> None:
@@ -30,24 +33,30 @@ def ensure_extra(extra: str, *modules: str) -> None:
     missing = [m for m in modules if importlib.util.find_spec(m) is None]
     if not missing:
         return
-    if extra in _attempted:
-        raise ImportError(
-            f"Falta blackcode[{extra}] y un intento previo en este proceso "
-            f"falló. Instálalo manualmente: pip install 'blackcode[{extra}]'"
+    with _lock:
+        # Reverifica dentro del lock: otro hilo pudo instalarlo mientras
+        # esperábamos.
+        missing = [m for m in modules if importlib.util.find_spec(m) is None]
+        if not missing:
+            return
+        if extra in _attempted:
+            raise ImportError(
+                f"Falta blackcode[{extra}] y un intento previo en este proceso "
+                f"falló. Instálalo manualmente: pip install 'blackcode[{extra}]'"
+            )
+        _attempted.add(extra)
+        print(
+            f"⟫ Falta 'blackcode[{extra}]'. Instalando…",
+            file=sys.stderr,
+            flush=True,
         )
-    _attempted.add(extra)
-    print(
-        f"⟫ Falta 'blackcode[{extra}]'. Instalando…",
-        file=sys.stderr,
-        flush=True,
-    )
-    try:
-        subprocess.run(
-            [sys.executable, "-m", "pip", "install", f"blackcode[{extra}]"],
-            check=True,
-        )
-    except subprocess.CalledProcessError as exc:
-        raise ImportError(
-            f"pip install 'blackcode[{extra}]' falló."
-        ) from exc
-    importlib.invalidate_caches()
+        try:
+            subprocess.run(
+                [sys.executable, "-m", "pip", "install", f"blackcode[{extra}]"],
+                check=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            raise ImportError(
+                f"pip install 'blackcode[{extra}]' falló."
+            ) from exc
+        importlib.invalidate_caches()

@@ -28,7 +28,9 @@ src/blackcode/
   wizard.py          Asistente interactivo de `init`
   catalog.py         Catálogo de modelos recomendados por VRAM
   dashboard.py       Tablero de métricas en HTML estático
-  cli.py             Interfaz de línea de comandos (solo argparse)
+  install.py         Auto-instalación de extras (`ensure_extra`)
+  cli.py             Parser raíz de la CLI (solo argparse)
+  commands/          Un módulo por subcomando de la CLI
   data/              Carga de datos local-first
   ingest/            Extractores de documentos y rastreador web
   trainers/          Backends de entrenamiento (llm, sklearn, ...)
@@ -49,15 +51,39 @@ La documentación de usuario (tutoriales y guías) está en `docs/`.
 3. **Extiende vía el registro.** Un backend nuevo es una subclase de
    `BaseTrainer` decorada con `@register_trainer("nombre")`. No metas lógica
    específica de un backend en el core.
-4. **Degradación elegante.** Si falta un extra, lanza un `ImportError` con el
-   comando exacto de instalación.
+4. **Los extras se instalan solos.** Antes de un import perezoso llama a
+   `ensure_extra("<extra>", "<modulo>", …)`: si falta, se instala con pip e
+   informa al usuario (y lanza `ImportError` con el comando exacto si pip
+   falla).
 
 ## Añadir un trainer
 
 1. Crea `src/blackcode/trainers/mi_backend.py` con una subclase de `BaseTrainer`.
 2. Decórala con `@register_trainer("mi-backend")`.
 3. Impórtala en `src/blackcode/trainers/__init__.py`.
-4. Añade un ejemplo en `examples/` y un test en `tests/`.
+4. Si usas el ecosistema Hugging Face, reutiliza los helpers de
+   `trainers/_hf.py` (tokenizer, TrainingArguments comunes, guardado).
+5. Añade un ejemplo en `examples/` y un test en `tests/`.
+
+## Publicar un plugin como paquete externo
+
+No hace falta tocar el core: cualquier paquete puede registrar sus plugins
+vía entry points en su propio `pyproject.toml`:
+
+```toml
+[project.entry-points."blackcode.trainers"]
+mi-backend = "mi_paquete.modulo:MiTrainer"
+
+[project.entry-points."blackcode.exporters"]
+mi-formato = "mi_paquete.modulo:MiExporter"
+
+[project.entry-points."blackcode.extractors"]
+mi-extension = "mi_paquete.modulo:MiExtractor"
+```
+
+Tras `pip install mi-paquete`, Blackcode los resuelve por nombre igual que
+los integrados (`blackcode trainers` los lista). Si un plugin falla al
+cargar, se omite con un aviso en el log — nunca tumba el motor.
 
 ## Estilo
 

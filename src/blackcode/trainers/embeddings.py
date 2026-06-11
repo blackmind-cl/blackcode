@@ -12,12 +12,11 @@ Extra requerido:  pip install 'blackcode[embeddings]'
 
 from __future__ import annotations
 
-import json
-
 from blackcode.data.base import Dataset
 from blackcode.install import ensure_extra
 from blackcode.log import get_logger
 from blackcode.registry import register_trainer
+from blackcode.trainers._hf import common_training_kwargs, save_and_record
 from blackcode.trainers.base import BaseTrainer, TrainResult
 
 _log = get_logger("trainers.embeddings")
@@ -69,12 +68,9 @@ class EmbeddingsTrainer(BaseTrainer):
 
         lr = tc.learning_rate if tc.learning_rate is not None else 2e-5
         args = SentenceTransformerTrainingArguments(
-            output_dir=out_dir,
-            num_train_epochs=tc.epochs,
-            per_device_train_batch_size=tc.batch_size or 16,
-            learning_rate=lr,
-            seed=tc.seed,
-            report_to=[],  # sin telemetría externa
+            **common_training_kwargs(
+                tc, out_dir, batch_size=tc.batch_size or 16, learning_rate=lr
+            ),
         )
         trainer = SentenceTransformerTrainer(
             model=model,
@@ -84,11 +80,8 @@ class EmbeddingsTrainer(BaseTrainer):
             loss=loss,
         )
         train_output = trainer.train()
-        model.save_pretrained(out_dir)
-
-        metrics = {"train_loss": float(train_output.training_loss)}
-        (self._ensure_output_dir() / "blackcode_metrics.json").write_text(
-            json.dumps(metrics, indent=2)
+        metrics = save_and_record(
+            trainer, None, out_dir, train_output, {"base_model": tc.model}
         )
         return TrainResult(
             output_dir=out_dir, metrics=metrics, extra={"base_model": tc.model}

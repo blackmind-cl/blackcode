@@ -11,6 +11,10 @@ from __future__ import annotations
 from importlib import metadata
 from typing import Callable
 
+from blackcode.log import get_logger
+
+_log = get_logger("registry")
+
 
 class _Registry:
     """Registro genérico de plugins resolubles por nombre."""
@@ -50,10 +54,21 @@ class _Registry:
             for ep in group:
                 try:
                     self._items.setdefault(ep.name.lower(), ep.load())
-                except Exception:  # noqa: BLE001 - un plugin roto no tumba el core
+                except Exception as exc:  # noqa: BLE001 - un plugin roto no tumba el core
+                    _log.warning(
+                        "El plugin %s '%s' (%s) falló al cargar y se omite: %s",
+                        self._kind,
+                        ep.name,
+                        ep.value,
+                        exc,
+                    )
                     continue
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            _log.warning(
+                "No se pudieron leer los entry points del grupo '%s': %s",
+                self._group,
+                exc,
+            )
 
     def get(self, name: str) -> type:
         """Devuelve la clase registrada bajo `name`."""

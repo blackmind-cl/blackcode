@@ -10,7 +10,6 @@ Extra requerido:  pip install 'blackcode[llm]'
 
 from __future__ import annotations
 
-import json
 import re
 
 from blackcode.data.base import Dataset
@@ -18,6 +17,11 @@ from blackcode.hardware import Strategy
 from blackcode.install import ensure_extra
 from blackcode.log import get_logger, track
 from blackcode.registry import register_trainer
+from blackcode.trainers._hf import (
+    common_training_kwargs,
+    load_tokenizer,
+    save_and_record,
+)
 from blackcode.trainers.base import BaseTrainer, TrainResult
 
 _log = get_logger("trainers.llm")
@@ -96,10 +100,7 @@ class LLMTrainer(BaseTrainer):
         ensure_extra("llm", "torch", "datasets", "transformers", "trl")
         import torch  # type: ignore
         from datasets import Dataset as HFDataset  # type: ignore
-        from transformers import (  # type: ignore
-            AutoModelForCausalLM,
-            AutoTokenizer,
-        )
+        from transformers import AutoModelForCausalLM  # type: ignore
         from trl import SFTConfig, SFTTrainer  # type: ignore
 
         tc = self.config.train
@@ -118,9 +119,7 @@ class LLMTrainer(BaseTrainer):
                 bnb_4bit_use_double_quant=True,
             )
 
-        tokenizer = AutoTokenizer.from_pretrained(tc.model)
-        if tokenizer.pad_token is None:
-            tokenizer.pad_token = tokenizer.eos_token
+        tokenizer = load_tokenizer(tc.model)
 
         model = AutoModelForCausalLM.from_pretrained(
             tc.model,
@@ -164,11 +163,6 @@ class LLMTrainer(BaseTrainer):
                 "`accelerate launch`.",
                 len(self.hardware.gpus),
             )
-        # Por defecto guardamos solo el modelo (no el estado del optimizador,
-        # que pesa 2-3× el modelo y suele ser innecesario para fine-tunes que
-        # se completan de una corrida). Se activa con `options.save_optimizer_state: true`
-        # si se quiere `--resume`.
-        save_optimizer = tc.options.get("save_optimizer_state", False)
         lr = (
             tc.learning_rate
             if tc.learning_rate is not None
@@ -177,19 +171,12 @@ class LLMTrainer(BaseTrainer):
         if tc.learning_rate is None:
             _log.info("Learning rate auto para estrategia %s: %g", strategy.value, lr)
         args = SFTConfig(
-            output_dir=out_dir,
-            num_train_epochs=tc.epochs,
-            per_device_train_batch_size=batch_size,
+            **common_training_kwargs(
+                tc, out_dir, batch_size=batch_size, learning_rate=lr
+            ),
             gradient_accumulation_steps=accum,
-            learning_rate=lr,
             bf16=self.hardware.accelerator.value == "cuda",
             fsdp=fsdp,
-            logging_steps=10,
-            save_strategy="epoch",
-            save_total_limit=1,
-            save_only_model=not save_optimizer,
-            seed=tc.seed,
-            report_to=[],  # sin telemetría externa
             dataset_text_field=field,
             max_length=tc.max_seq_length,
         )
@@ -205,12 +192,8 @@ class LLMTrainer(BaseTrainer):
         if tc.resume:
             _log.info("Reanudando desde el último checkpoint en %s", out_dir)
         train_output = trainer.train(resume_from_checkpoint=tc.resume or None)
-        trainer.save_model(out_dir)
-        tokenizer.save_pretrained(out_dir)
-
-        metrics = {"train_loss": float(train_output.training_loss)}
-        (self._ensure_output_dir() / "blackcode_metrics.json").write_text(
-            json.dumps({"strategy": strategy.value, **metrics}, indent=2)
+        metrics = save_and_record(
+            trainer, tokenizer, out_dir, train_output, {"strategy": strategy.value}
         )
         return TrainResult(
             output_dir=out_dir,

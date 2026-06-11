@@ -13,6 +13,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 from blackcode.exporters.base import BaseExporter, ExportResult
@@ -49,8 +50,10 @@ class GgufExporter(BaseExporter):
         f16_path = out_dir / f"{self.config.name}.f16.gguf"
 
         _log.info("Convirtiendo %s a GGUF (f16)", src)
+        # sys.executable, no "python": el alias puede no existir (macOS) o
+        # apuntar a otro intérprete sin las deps del venv actual.
         subprocess.run(
-            ["python", str(script), str(src),
+            [sys.executable, str(script), str(src),
              "--outfile", str(f16_path), "--outtype", "f16"],
             check=True,
         )

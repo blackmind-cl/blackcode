@@ -12,12 +12,11 @@ Extra requerido:  pip install 'blackcode[llm]'
 
 from __future__ import annotations
 
-import json
-
 from blackcode.data.base import Dataset
 from blackcode.install import ensure_extra
 from blackcode.log import get_logger
 from blackcode.registry import register_trainer
+from blackcode.trainers._hf import common_training_kwargs, save_and_record
 from blackcode.trainers.base import BaseTrainer, TrainResult
 
 _log = get_logger("trainers.transformer-classifier")
@@ -89,16 +88,9 @@ class TransformerClassifierTrainer(BaseTrainer):
 
         lr = tc.learning_rate if tc.learning_rate is not None else 2e-5
         args = TrainingArguments(
-            output_dir=out_dir,
-            num_train_epochs=tc.epochs,
-            per_device_train_batch_size=tc.batch_size or 16,
-            learning_rate=lr,
-            seed=tc.seed,
-            logging_steps=10,
-            save_strategy="epoch",
-            save_total_limit=1,
-            save_only_model=not tc.options.get("save_optimizer_state", False),
-            report_to=[],  # sin telemetría externa
+            **common_training_kwargs(
+                tc, out_dir, batch_size=tc.batch_size or 16, learning_rate=lr
+            ),
         )
         trainer = Trainer(
             model=model,
@@ -109,12 +101,8 @@ class TransformerClassifierTrainer(BaseTrainer):
             processing_class=tokenizer,
         )
         train_output = trainer.train()
-        trainer.save_model(out_dir)
-        tokenizer.save_pretrained(out_dir)
-
-        metrics = {"train_loss": float(train_output.training_loss)}
-        (self._ensure_output_dir() / "blackcode_metrics.json").write_text(
-            json.dumps({"labels": labels, **metrics}, indent=2)
+        metrics = save_and_record(
+            trainer, tokenizer, out_dir, train_output, {"labels": labels}
         )
         return TrainResult(
             output_dir=out_dir, metrics=metrics, extra={"labels": labels}

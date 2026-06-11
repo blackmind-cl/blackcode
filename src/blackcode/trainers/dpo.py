@@ -12,12 +12,15 @@ Extra requerido:  pip install 'blackcode[llm]'
 
 from __future__ import annotations
 
-import json
-
 from blackcode.data.base import Dataset
 from blackcode.install import ensure_extra
 from blackcode.log import get_logger
 from blackcode.registry import register_trainer
+from blackcode.trainers._hf import (
+    common_training_kwargs,
+    load_tokenizer,
+    save_and_record,
+)
 from blackcode.trainers.base import BaseTrainer, TrainResult
 
 _log = get_logger("trainers.dpo")
@@ -49,10 +52,7 @@ class PreferenceTrainer(BaseTrainer):
         ensure_extra("llm", "torch", "datasets", "transformers", "trl")
         import torch  # type: ignore
         from datasets import Dataset as HFDataset  # type: ignore
-        from transformers import (  # type: ignore
-            AutoModelForCausalLM,
-            AutoTokenizer,
-        )
+        from transformers import AutoModelForCausalLM  # type: ignore
 
         method = self.config.train.options.get("method", "dpo").lower()
         if method not in ("dpo", "orpo"):
@@ -69,12 +69,8 @@ class PreferenceTrainer(BaseTrainer):
         prompt_f, chosen_f, rejected_f = self._fields()
         _log.info("Alineación de preferencias con método '%s'", method)
 
-        tokenizer = AutoTokenizer.from_pretrained(tc.model)
-        if tokenizer.pad_token is None:
-            tokenizer.pad_token = tokenizer.eos_token
-        model = AutoModelForCausalLM.from_pretrained(
-            tc.model, torch_dtype=torch.bfloat16
-        )
+        tokenizer = load_tokenizer(tc.model)
+        model = AutoModelForCausalLM.from_pretrained(tc.model, dtype=torch.bfloat16)
 
         def to_hf(ds: Dataset):
             return HFDataset.from_list(
@@ -90,16 +86,9 @@ class PreferenceTrainer(BaseTrainer):
 
         lr = tc.learning_rate if tc.learning_rate is not None else 5e-6
         args = PrefConfig(
-            output_dir=out_dir,
-            num_train_epochs=tc.epochs,
-            per_device_train_batch_size=tc.batch_size or 1,
-            learning_rate=lr,
-            seed=tc.seed,
-            logging_steps=10,
-            save_strategy="epoch",
-            save_total_limit=1,
-            save_only_model=not tc.options.get("save_optimizer_state", False),
-            report_to=[],  # sin telemetría externa
+            **common_training_kwargs(
+                tc, out_dir, batch_size=tc.batch_size or 1, learning_rate=lr
+            ),
         )
         # DPO necesita un modelo de referencia; ORPO no lo usa.
         ref_kwargs = {"ref_model": None} if method == "dpo" else {}
@@ -112,12 +101,8 @@ class PreferenceTrainer(BaseTrainer):
             **ref_kwargs,
         )
         train_output = trainer.train()
-        trainer.save_model(out_dir)
-        tokenizer.save_pretrained(out_dir)
-
-        metrics = {"train_loss": float(train_output.training_loss)}
-        (self._ensure_output_dir() / "blackcode_metrics.json").write_text(
-            json.dumps({"method": method, **metrics}, indent=2)
+        metrics = save_and_record(
+            trainer, tokenizer, out_dir, train_output, {"method": method}
         )
         return TrainResult(
             output_dir=out_dir, metrics=metrics, extra={"method": method}
