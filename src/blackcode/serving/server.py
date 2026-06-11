@@ -26,7 +26,7 @@ def serve_model(config: RunConfig) -> None:
     ensure_extra("serve", "uvicorn", "fastapi", "pydantic")
     import uvicorn  # type: ignore
     from fastapi import FastAPI  # type: ignore
-    from pydantic import BaseModel  # type: ignore
+    from pydantic import BaseModel, Field  # type: ignore
 
     ensure_extra("llm", "torch", "transformers")
     import torch  # type: ignore
@@ -60,10 +60,12 @@ def serve_model(config: RunConfig) -> None:
     class ChatRequest(BaseModel):
         model: str | None = None
         messages: list[Message]
-        max_tokens: int = 256
+        # Acotado: sin tope, una petición podría pedir miles de millones de
+        # tokens y dejar la máquina generando indefinidamente.
+        max_tokens: int = Field(default=256, ge=1, le=8192)
         # Greedy por defecto: determinista y más estable para modelos
         # pequeños o poco entrenados que pueden producir logits con NaN/inf.
-        temperature: float = 0.0
+        temperature: float = Field(default=0.0, ge=0.0, le=2.0)
 
     @app.get("/health")
     def health():

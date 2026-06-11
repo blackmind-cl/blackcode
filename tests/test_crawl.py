@@ -117,3 +117,85 @@ def test_parse_sitemap_invalid_xml_returns_empty():
     from blackcode.ingest.crawl import _parse_sitemap_xml
 
     assert _parse_sitemap_xml(b"esto no es xml") == ([], [])
+
+
+# --- Seguridad: las URLs de contenido remoto no pueden salirse del sitio ----
+
+
+def test_safe_to_fetch_rejects_file_scheme():
+    from blackcode.ingest.crawl import _safe_to_fetch
+
+    assert not _safe_to_fetch("file:///etc/passwd", "miempresa.cl")
+    assert not _safe_to_fetch("ftp://miempresa.cl/x", "miempresa.cl")
+    assert _safe_to_fetch("https://miempresa.cl/x", "miempresa.cl")
+    assert _safe_to_fetch("http://www.miempresa.cl/y", "miempresa.cl")
+
+
+def test_safe_to_fetch_rejects_other_domains():
+    from blackcode.ingest.crawl import _safe_to_fetch
+
+    assert not _safe_to_fetch("https://atacante.com/p", "miempresa.cl")
+
+
+def test_fetch_refuses_file_urls(tmp_path):
+    """`_fetch` no debe abrir file:// aunque se lo pidan directamente."""
+    from blackcode.ingest.crawl import _fetch
+
+    secreto = tmp_path / "secreto.html"
+    secreto.write_text("<p>privado</p>", encoding="utf-8")
+    assert _fetch(secreto.as_uri()) is None
+
+
+def test_fetch_raw_refuses_file_urls(tmp_path):
+    from blackcode.ingest.crawl import _fetch_raw
+
+    secreto = tmp_path / "secreto.xml"
+    secreto.write_text("<urlset/>", encoding="utf-8")
+    assert _fetch_raw(secreto.as_uri()) is None
+
+
+def test_read_sitemap_filters_hostile_urls(monkeypatch):
+    """Un sitemap malicioso no puede inyectar file:// ni otros dominios."""
+    import importlib
+
+    # El paquete ingest reexporta la función `crawl`, que hace sombra al
+    # módulo homónimo; import_module devuelve siempre el módulo.
+    crawl = importlib.import_module("blackcode.ingest.crawl")
+
+    evil_sitemap = (
+        b'<?xml version="1.0" encoding="UTF-8"?>'
+        b'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        b"<url><loc>file:///etc/passwd</loc></url>"
+        b"<url><loc>https://atacante.com/exfil</loc></url>"
+        b"<url><loc>https://miempresa.cl/legitima</loc></url>"
+        b"</urlset>"
+    )
+    monkeypatch.setattr(crawl, "_fetch_raw", lambda url: evil_sitemap)
+    urls = crawl._read_sitemap("https://miempresa.cl/sitemap.xml", max_urls=10)
+    assert urls == ["https://miempresa.cl/legitima"]
+
+
+def test_read_sitemap_filters_hostile_subsitemaps(monkeypatch):
+    """Los sub-sitemaps de un índice también se validan antes de seguirlos."""
+    import importlib
+
+    crawl = importlib.import_module("blackcode.ingest.crawl")
+
+    index = (
+        b'<?xml version="1.0" encoding="UTF-8"?>'
+        b'<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        b"<sitemap><loc>file:///etc/shadow</loc></sitemap>"
+        b"<sitemap><loc>https://atacante.com/sm.xml</loc></sitemap>"
+        b"</sitemapindex>"
+    )
+    fetched: list[str] = []
+
+    def fake_fetch_raw(url):
+        fetched.append(url)
+        return index
+
+    monkeypatch.setattr(crawl, "_fetch_raw", fake_fetch_raw)
+    urls = crawl._read_sitemap("https://miempresa.cl/sitemap.xml", max_urls=10)
+    assert urls == []
+    # Solo se descargó el sitemap inicial: ninguno de los hostiles se siguió.
+    assert fetched == ["https://miempresa.cl/sitemap.xml"]

@@ -25,6 +25,15 @@ Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
   `python` (que puede no existir o ser otro intérprete).
 - El trainer `dpo` usaba el argumento deprecado `torch_dtype`; ahora `dtype`.
 
+### Seguridad
+- El rastreador valida las URLs listadas en sitemaps (y sub-sitemaps):
+  solo http/https y solo el mismo sitio. Antes, un sitemap malicioso podía
+  hacer que el motor leyera archivos locales (`file:///…`) o hosts
+  arbitrarios al corpus. `_fetch`/`_fetch_raw` rechazan además cualquier
+  esquema no http(s) como defensa en profundidad.
+- La API local de inferencia acota `max_tokens` (1–8192) y `temperature`
+  (0–2): una petición ya no puede dejar la máquina generando sin límite.
+
 ## [0.1.0] — 2026-05-21
 
 Primera versión pública.

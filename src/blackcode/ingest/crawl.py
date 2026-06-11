@@ -32,6 +32,17 @@ def _same_site(url: str, netloc: str) -> bool:
     return _site(url) == netloc
 
 
+def _safe_to_fetch(url: str, netloc: str) -> bool:
+    """¿Es seguro descargar esta URL hallada en contenido remoto?
+
+    Solo http/https y solo el mismo sitio. Sin esto, un sitemap (o HTML)
+    malicioso podría listar `file:///etc/passwd` u hosts arbitrarios y el
+    rastreador los leería al corpus: urlopen abre file:// sin quejarse.
+    """
+    scheme = urlparse(url).scheme.lower()
+    return scheme in ("http", "https") and _same_site(url, netloc)
+
+
 def _normalize(url: str) -> str:
     """Normaliza una URL para deduplicar variantes de la misma página.
 
@@ -49,6 +60,9 @@ def _normalize(url: str) -> str:
 
 def _fetch(url: str) -> str | None:
     """Descarga una URL; devuelve el HTML, o None si no es HTML o falla."""
+    if urlparse(url).scheme.lower() not in ("http", "https"):
+        _log.warning("Esquema no soportado (solo http/https): %s", url)
+        return None
     try:
         request = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
         with urllib.request.urlopen(request, timeout=30) as response:
@@ -132,7 +146,10 @@ def crawl(
 
 
 def _fetch_raw(url: str) -> bytes | None:
-    """Descarga una URL devolviendo los bytes en bruto (sin filtros)."""
+    """Descarga una URL devolviendo los bytes en bruto (sin filtro de tipo)."""
+    if urlparse(url).scheme.lower() not in ("http", "https"):
+        _log.warning("Esquema no soportado (solo http/https): %s", url)
+        return None
     try:
         request = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
         with urllib.request.urlopen(request, timeout=30) as response:
@@ -165,7 +182,13 @@ def _parse_sitemap_xml(raw: bytes) -> tuple[list[str], list[str]]:
 
 
 def _read_sitemap(start_url: str, max_urls: int) -> list[str]:
-    """Lee un sitemap (urlset o sitemapindex, recursivo) y devuelve las URLs."""
+    """Lee un sitemap (urlset o sitemapindex, recursivo) y devuelve las URLs.
+
+    Las URLs y sub-sitemaps listados en el XML son contenido remoto: solo se
+    aceptan si son http/https y del mismo sitio que el sitemap inicial (lo
+    que además exige la propia especificación de sitemaps).
+    """
+    netloc = _site(start_url)
     pending: list[str] = [start_url]
     seen: set[str] = set()
     found: list[str] = []
@@ -179,10 +202,25 @@ def _read_sitemap(start_url: str, max_urls: int) -> list[str]:
             continue
         urls, subs = _parse_sitemap_xml(raw)
         for url in urls:
+            if not _safe_to_fetch(url, netloc):
+                _log.warning(
+                    "Ignorada URL del sitemap fuera del sitio o con esquema "
+                    "no soportado: %s",
+                    url,
+                )
+                continue
             found.append(url)
             if len(found) >= max_urls:
                 return found
-        pending.extend(subs)
+        for sub in subs:
+            if _safe_to_fetch(sub, netloc):
+                pending.append(sub)
+            else:
+                _log.warning(
+                    "Ignorado sub-sitemap fuera del sitio o con esquema no "
+                    "soportado: %s",
+                    sub,
+                )
     return found
 
 
