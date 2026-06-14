@@ -50,6 +50,11 @@ def ensure_extra(extra: str, *modules: str) -> None:
             file=sys.stderr,
             flush=True,
         )
+        # `blackcode[extra]` funciona aunque blackcode NO esté en PyPI: pip ve
+        # que el core ya está instalado (lo haya traído PyPI, git o un install
+        # editable), da el requisito `blackcode` por satisfecho y solo baja las
+        # dependencias del extra. No reinstala ni vuelve a clonar el core.
+        # (No cambiar a `... @ git+URL`: eso forzaría un re-clone en cada extra.)
         try:
             subprocess.run(
                 [sys.executable, "-m", "pip", "install", f"blackcode[{extra}]"],
