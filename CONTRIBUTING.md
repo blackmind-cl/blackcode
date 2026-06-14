@@ -97,6 +97,22 @@ cargar, se omite con un aviso en el log — nunca tumba el motor.
 - Describe el problema y la solución.
 - Si cambias la API pública, actualiza el README y el ROADMAP.
 
+## Publicar una versión
+
+El release a PyPI es automático (`.github/workflows/release.yml`), disparado
+al empujar un tag `vX.Y.Z`:
+
+1. Sube `version` en `pyproject.toml` y registra los cambios en `CHANGELOG.md`.
+2. Haz commit y crea el tag con la MISMA versión:
+   ```bash
+   git tag v0.1.0 && git push origin v0.1.0
+   ```
+3. El workflow corre lint + tests (3.10–3.13), verifica que el tag coincide
+   con la versión del paquete, construye e publica en PyPI.
+
+Usa **Trusted Publishing** (OIDC): no hay tokens de PyPI guardados. Hay que
+configurarlo una vez en la cuenta de PyPI (ver cabecera de `release.yml`).
+
 ## Código de conducta
 
 Sé respetuoso y constructivo. Asumimos buena fe.

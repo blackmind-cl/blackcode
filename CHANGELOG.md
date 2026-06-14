@@ -19,6 +19,13 @@ Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 - La CLI se reorganizó en un módulo por subcomando (`blackcode/commands/`);
   `blackcode.cli` queda como parser raíz y despacho. Sin cambios de uso.
 - `ensure_extra` es seguro ante llamadas concurrentes (lock de proceso).
+- Metadatos de PyPI corregidos: `project.urls` apunta al repo y sitio reales
+  (antes el placeholder `your-org`).
+
+### Infraestructura
+- Workflow de release (`release.yml`): al empujar un tag `vX.Y.Z` corre
+  lint + tests, valida que el tag coincide con la versión y publica en PyPI
+  vía Trusted Publishing (OIDC, sin tokens guardados).
 
 ### Corregido
 - El exportador GGUF invoca el conversor con `sys.executable` en lugar de
