@@ -5,45 +5,11 @@ Este proyecto sigue [versionado semántico](https://semver.org/lang/es/).
 
 ## [Sin publicar]
 
-### Añadido
-- Helper compartido `trainers/_hf.py`: política única de checkpoints,
-  `report_to=[]` y guardado de métricas para los trainers Hugging Face.
-- El trainer `embeddings` ahora aplica la misma política de checkpoints que
-  el resto (`save_total_limit=1`, `save_only_model` por defecto).
-- El registro de plugins avisa por log cuando un entry point de terceros
-  falla al cargar, en vez de omitirlo en silencio.
-- Documentación nueva: `docs/install.md`, `docs/serving.md`,
-  `docs/evaluation.md`.
-
-### Cambiado
-- La CLI se reorganizó en un módulo por subcomando (`blackcode/commands/`);
-  `blackcode.cli` queda como parser raíz y despacho. Sin cambios de uso.
-- `ensure_extra` es seguro ante llamadas concurrentes (lock de proceso).
-- Metadatos de PyPI corregidos: `project.urls` apunta al repo y sitio reales
-  (antes el placeholder `your-org`).
-
-### Infraestructura
-- Workflow de release (`release.yml`): al empujar un tag `vX.Y.Z` corre
-  lint + tests, valida que el tag coincide con la versión y publica en PyPI
-  vía Trusted Publishing (OIDC, sin tokens guardados).
-
-### Corregido
-- El exportador GGUF invoca el conversor con `sys.executable` en lugar de
-  `python` (que puede no existir o ser otro intérprete).
-- El trainer `dpo` usaba el argumento deprecado `torch_dtype`; ahora `dtype`.
-
-### Seguridad
-- El rastreador valida las URLs listadas en sitemaps (y sub-sitemaps):
-  solo http/https y solo el mismo sitio. Antes, un sitemap malicioso podía
-  hacer que el motor leyera archivos locales (`file:///…`) o hosts
-  arbitrarios al corpus. `_fetch`/`_fetch_raw` rechazan además cualquier
-  esquema no http(s) como defensa en profundidad.
-- La API local de inferencia acota `max_tokens` (1–8192) y `temperature`
-  (0–2): una petición ya no puede dejar la máquina generando sin límite.
+Nada todavía.
 
 ## [0.1.0] — 2026-05-21
 
-Primera versión pública.
+Primera versión pública (primer release en PyPI).
 
 ### Añadido
 - **Núcleo ligero**: una sola dependencia obligatoria (PyYAML). Todo lo
@@ -74,4 +40,21 @@ Primera versión pública.
 - **Instalador de una línea** (`install.sh`): instala lo que falte (Homebrew,
   Python, git) y deja el motor en un entorno aislado.
 - Tablero HTML estático de métricas, aumento de datos EDA, reanudación desde
-  checkpoint, suite de 157 tests.
+  checkpoint, suite de tests.
+- Helper compartido `trainers/_hf.py`: política única de checkpoints,
+  `report_to=[]` y guardado de métricas para los trainers Hugging Face.
+- El registro de plugins avisa por log cuando un entry point de terceros
+  falla al cargar, en vez de omitirlo en silencio.
+
+### Infraestructura
+- Workflow de release (`release.yml`): al empujar un tag `vX.Y.Z` corre
+  lint + tests, valida que el tag coincide con la versión y publica en PyPI
+  vía Trusted Publishing (OIDC, sin tokens guardados).
+
+### Seguridad
+- El rastreador valida las URLs listadas en sitemaps (y sub-sitemaps):
+  solo http/https y solo el mismo sitio, para que un sitemap malicioso no
+  pueda hacer que el motor lea archivos locales (`file:///…`) ni hosts
+  arbitrarios al corpus.
+- La API local de inferencia acota `max_tokens` (1–8192) y `temperature`
+  (0–2): una petición no puede dejar la máquina generando sin límite.
